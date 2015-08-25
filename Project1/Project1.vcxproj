@@ -43,8 +43,8 @@
     <LibraryPath>C:\FFMPEG\vs2010_build\bin;C:\FFMPEG\vs2010_build\lib;C:\EX-Pthread\Pre-built.2\lib;C:\opencv\build\x86\vc12\lib;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>C:\FFMPEG\vs2010_build\include;C:\EX-Pthread\Pre-built.2\include;D:\Opencv\opencv\build\include;C:\opencv\build\include\opencv;C:\opencv\build\include\opencv2;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
-    <LibraryPath>C:\FFMPEG\vs2010_build\bin;C:\FFMPEG\vs2010_build\lib;C:\EX-Pthread\Pre-built.2\lib;D:\Opencv\opencv\build\x86\vc12\lib;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
+    <IncludePath>C:\FFMPEG\vs2010_build\include;C:\EX-Pthread\Pre-built.2\include;C:\Opencv\opencv\build\include;C:\Opencv\opencv\build\include\opencv;C:\Opencv\opencv\build\include\opencv2;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <LibraryPath>C:\FFMPEG\vs2010_build\bin;C:\FFMPEG\vs2010_build\lib;C:\EX-Pthread\Pre-built.2\lib;C:\Opencv\opencv\build\x86\vc12\lib;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

@@ -102,16 +102,16 @@ enum ARDRONE_NAVDATA_TAG {
 
 
 using namespace std;
-//SPEED
+//SPEED ，速度
 struct SPEED{
 	double vx, vy, vz, vr;
 	double LR, FB, UD, Turn;
-//------------------------------------------------------------------------------------------
-	SPEED(double lr = 0.3, double fb = 0.3, double ud = 0.3, double tturn = 0.4){
-//------------------------------------------------------------------------------------------
+	SPEED(double lr = 0.3, double fb = 0.9, double ud = 0.3, double tturn = 0.3){
+		//here is the code huang change is *2
 		LR = lr;
 		FB = fb;
 		UD = ud;
+		//////////////////////////
 		Turn = tturn;
 		vx = vy = vz = vr = 0;
 	}
@@ -121,9 +121,11 @@ struct SPEED{
 	void Print(){
 		printf("%.2f,%.2f,%.2f,%.2f\n", vx, vy, vz, vr);
 	}
-	void Update(double x, double y, double z){
-		vx = x; vy = y; vz = z;
+	//跟新速度
+	void Update(double x, double y, double z, double r){
+		vx = x; vy = y; vz = z; vr = r;
 	}
+	//跟新速度，bits指的是速度的类型，GG_T指的是在pre,还是电脑操控
 	void Update(int bits, bool GG_T){//FBLRUD
 		double rate = 1;
 		for (int i = 0; i < 3; i++){  // if GG_T = false as pre; else Turn! @@@
@@ -140,42 +142,65 @@ struct SPEED{
 				vx = rate*FB;
 			}
 			else if (i == 1){
-				if (GG_T == false)vy = rate*LR;
-				else vr = rate*Turn;
+				if (GG_T == false)
+				{
+					vy = rate*LR;
+					cout << "Updated vy as " << vy << " !!!!!!!!!! " << rate << ' ' << LR << endl;
+				}
+				else
+				{
+					vr = rate*Turn;
+					cout << "Updated vr as " << vr << " ?????????? " << rate << ' '<< Turn << endl;
+				}
 			}
 			else{
 				vz = rate*UD;
 			}
 		}
-		if (GG_T == false)vr = 0;
+		if (GG_T == false)
+			vr = 0;
+		else
+			vy = 0;
 	}
+	//翻滚
 	void Roll(double add){
 		vr = add;
 	}
+	//前后方向的速度
 	void Up_FB(bool f = true){
+		// here  is the code huang changed is add *3 to the expr 
 		if (f) vx = FB;
 		else vx = -FB;
+		cout << "F_B UP"<<endl;
+		//cout << vx << endl;
+		////////////////////////////////////////////////////////////
 	}
+	//更改左右移动方向，
 	void Up_LR(bool f = true){
 		if (f) vy = LR;
 		else vy = -LR;
 	}
+	// what is the meaning of the function
 	bool operator == (const SPEED x)const {
 		return (x.vx) / std::abs(x.vx) == vx / std::abs(vx) && (x.vy) / std::abs(x.vy) == vy / std::abs(vy) && x.vz / std::abs(x.vz) == vz / std::abs(vz) && x.vr == vr;
 	}
+	//判断是否是0速度
 	bool isEmpty(){
 		return vx == 0 && vy == 0 && vz == 0 && vr == 0;
 	}
+	//获取低速度，当前速度1/4
 	SPEED GotSlow(){
 		SPEED ans;
-		ans.Update(vx / 4, vy / 4, vz / 4);
+		ans.Update(vx / 4, vy / 4, vz / 4, vr / 4);
 		return ans;
 	}
+	//获取高速度，当前速度*3
 	SPEED GotBig(){
 		SPEED ans;
-		ans.Update(vx * 3, vy * 3, vz * 3);
+		ans.Update(vx * 3, vy * 3, vz * 3, vr * 3);
 		return ans;
 	}
+	//锁定当前飞机状态
 	void Lock(int bits=0){
 		if (bits ==0 && vz != 0)vx = vr = vy = 0;
 		if (bits == 0 && vx != 0) vy = vz = vr = 0;
@@ -311,6 +336,7 @@ int UDPSocket::send2(void *data, size_t size)
 // Description  : Send the data with format.
 // Return value : SUCCESS: Number of sent bytes  FAILURE: 0
 // --------------------------------------------------------------------------
+//Udp 发送消息
 int UDPSocket::sendf(const char *str, ...)
 {
 	char msg[1024];
@@ -1416,9 +1442,18 @@ public:
 				if (fabs(v[i]) > 1.0) v[i] /= fabs(v[i]);
 			}
 
-			// Send a command
+			// Send a command,
 			if (mutexCommand) pthread_mutex_lock(mutexCommand);
-			sockCommand.sendf("AT*PCMD=%d,%d,%d,%d,%d,%d\r", Get_Seq(), mode, *(int*)(&v[0]), *(int*)(&v[1]), *(int*)(&v[2]), *(int*)(&v[3]));
+		//	for (int i = 0; i < 5; i++){
+		//		fstream file("C:\\log2.txt", ios::out | ios::app);
+				sockCommand.sendf("AT*PCMD=%d,%d,%d,%d,%d,%d\r", Get_Seq(), mode, *(int*)(&v[0]), *(int*)(&v[1]), *(int*)(&v[2]), *(int*)(&v[3]));
+				//sockCommand.sendf("AT*PCMD=%d,%d,%d,%d,%d,%d\r", Get_Seq(), mode, *(int*)(&v[0]), *(int*)(&v[1]), *(int*)(&v[2]), *(int*)(&v[3]));
+				//sockCommand.sendf("AT*PCMD=%d,%d,%d,%d,%d,%d\r", Get_Seq(), mode, *(int*)(&v[0]), *(int*)(&v[1]), *(int*)(&v[2]), *(int*)(&v[3]));
+		//		file << Get_Seq() << " " << mode << " " << *(int*)(&v[0]) << " " << *(int*)(&v[1]) << " ";
+		//		file << *(int *)(&v[2]) << " " << *(int *)(&v[3]) << endl;
+		//		file.close();
+		//	}
+		//	cout << "data has been sent 5 times\n";
 			if (mutexCommand) pthread_mutex_unlock(mutexCommand);
 		}
 	}

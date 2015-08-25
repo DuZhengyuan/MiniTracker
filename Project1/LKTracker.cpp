@@ -7,7 +7,7 @@ LKTracker::LKTracker(){
   level = 5;
   lambda = 0.5;
 }
-//level 级别 lambda 参数
+
 
 bool LKTracker::trackf2f(const Mat& img1, const Mat& img2,vector<Point2f> &points1, vector<cv::Point2f> &points2){
   //TODO!:implement c function cvCalcOpticalFlowPyrLK() or Faster tracking function

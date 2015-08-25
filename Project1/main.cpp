@@ -6,23 +6,25 @@
 #include <cstdio>
 #include <time.h>
 #include "Ardrone.h"
-using namespace cv; //Use open cv 
+#include <ctime>
+using namespace cv;
 using namespace std;
 //Global variables    // Can't change
 Rect box;
 bool drawing_box = false;
-bool gotBB = false;   
+bool gotBB = false;
 bool tl = true;
-//FRAME  //work every frame 
-bool Global_Pro_LT; 
+//FRAME
+bool Global_Pro_LT;
 cv::Rect init_Fr, cur_Fr;
+//cur_Fr 让它等于pbox,pbox 是算法算出来的物体的矩形框，然后根据
 const char winName[10] = "DXY";
 //bounding box mouse callback
 void mouseHandler(int event, int x, int y, int flags, void *param);
 cv::Mat getFlow(cv::Mat img, int threshold);
 // *** *** ***
 SPEED speed;
-void Control(ARDrone &ardrone, char key); //控制飞机
+void Control(ARDrone &ardrone, char key);
 int L_SL = 1200;
 int R_SL = 3000;
 const int TTX = 640;
@@ -33,23 +35,25 @@ const int POP = 12;
 int Make_dec(ARDrone &ardrone);
 void PRINT_info(ARDrone &ardrone,cv::Mat &frame);
 void SetRange();
+SPEED GotSlow(SPEED now);
 int main(int argc, char * argv[]){
+	fstream file("C:\\log.txt", ios::out | ios::app);
 	FileStorage fs;
 	//Read options
 	fs.open("parameters.yml", FileStorage::READ);
 	ARDrone ardrone;
 	//Init camera
+	//设备初始化
 	if (!ardrone.Init()){  cout << "Ardrone Init failed !" << endl; return 0; }
 	//Register mouse callback to draw the bounding box
-	cvNamedWindow(winName, CV_WINDOW_AUTOSIZE);
-	cvSetMouseCallback(winName, mouseHandler, NULL);
+	cvNamedWindow(winName, CV_WINDOW_AUTOSIZE); //用来创建窗口显示图像
+	cvSetMouseCallback(winName, mouseHandler, NULL);// 鼠标控制回调
 	//TLD framework
 	TLD tld;
 	//Read parameters file
-	tld.read(fs.getFirstTopLevelNode());
-
-	Mat frame, last_gray,PPP; //
-	VideoWriter outputVideo("output.avi", CV_FOURCC('M', 'J', 'P', 'G'), 25.0, Size(640, 360));
+	tld.read(fs.getFirstTopLevelNode()); //从文件中读取消息
+	Mat frame, last_gray,PPP;
+	VideoWriter outputVideo("output.avi", CV_FOURCC('M', 'J', 'P', 'G'), 25.0, Size(640, 360)); //输出视频
 
 	///Initialization
     
@@ -58,103 +62,165 @@ GETBOUNDINGBOX:
         frame = ardrone.getFrame();
 		cvtColor(frame, last_gray, CV_RGB2GRAY);
 		//last_gray = frame;
-		drawBox(frame,box); //输出至控制端
+		drawBox(frame,box);
 		init_Fr = box;
 		imshow(winName, frame);
-		char key = cvWaitKey(33); //为什么是33
+		char key = cvWaitKey(33);
 		if (key == 'q')
 			return 0;
 	}
-	//box 选定的追踪方框
 	if (min(box.width,box.height)<(int)fs.getFirstTopLevelNode()["min_win"]){
 		cout << "Bounding box too small, try again." << endl;
 		gotBB = false;
-		goto GETBOUNDINGBOX;//重新再去读取方框
+		goto GETBOUNDINGBOX;
 	}
 	//Remove callback
-	cvSetMouseCallback(winName, NULL, NULL);//点 拖 弹 
+	cvSetMouseCallback(winName, NULL, NULL);
 	//printf("Initial Bounding Box = x:%d y:%d h:%d w:%d\n",box.x,box.y,box.width,box.height);
 	//Output file
-	FILE *bb_file = fopen("bounding_boxes.txt","w");//这是什么 读入一个跟踪阵列
+	FILE *bb_file = fopen("bounding_boxes.txt","w");
 	//TLD initialization
-	tld.init(last_gray,box,bb_file);//TLD算法入门
+	tld.init(last_gray,box,bb_file);
 
-	SetRange(); //设置区间
+	SetRange();
 
 	///Run-time
-	Mat current_gray; //当前灰度
-	BoundingBox pbox;  
-	vector<Point2f> pts1; //可变长的数组
+	Mat current_gray;
+	BoundingBox pbox;
+	vector<Point2f> pts1;
 	vector<Point2f> pts2;
-	bool status=true; 
+	bool status=true;
 	printf("Current Box:(%d,%d)\n", init_Fr.height, init_Fr.width);
 	bool Lock = false;
 	SPEED pre_speed;
-	for (int Lost = 0, count = 0; true; count++){ //控制进程
+	clock_t last_act_time = clock() - 100;
+	for (int Lost = 0, count = 0; true; count++)
+	{
+		//获取飞机上的祯
         frame = ardrone.getFrame();
-		outputVideo << frame; //把每帧输出到桌面上
-		cvtColor(frame, current_gray, CV_RGB2GRAY); //把它彩色的图变成灰色的图
+		outputVideo << frame;
+		//输出视频
+		cvtColor(frame, current_gray, CV_RGB2GRAY);//把它彩色的图变成灰色的图
 		//Process Frame
-		tld.processFrame(last_gray,current_gray,pts1,pts2,pbox,status,tl,bb_file); //通过上一帧和下一帧的灰度 
+		tld.processFrame(last_gray,current_gray,pts1,pts2,pbox,status,tl,bb_file);
 		//Draw Points
-		if (status){
-			drawBox(frame,pbox); //Pbox 是啥
-			cur_Fr = pbox; 
+		if (status)
+		{
+			drawBox(frame,pbox);
+			//pbox 来源于算法，cur_fr 是当前得到物体的框大小
+			cur_Fr = pbox;
 			Lost = 0;
-		}else{
-			Lost++;
 		}
+		else
+			Lost++;
+
 		PRINT_info(ardrone, frame);
 		//Display
 		imshow(winName, frame);
-		// 输出
 		
 		//swap points and images
 		swap(last_gray,current_gray);
 		pts1.clear();
 		pts2.clear();
 		
-		char key = cvWaitKey(33);//33 ！ 
-		if (key == 27){ //27  空格
+		char key = cvWaitKey(33);//获取当前键盘值，刷新频率：33ms
+		if (key == 27)
 			break;
-		}else if (key == 'b'){
+		else if (key == 'b')
+		{
 			Lock = !Lock;
-			cout << "Lock:" << (Lock ? "true" : "false") << endl; //是否经过锁定
+			cout << "Lock:" << (Lock ? "true" : "false") << endl;
 		}
-		speed.ZERO();//为什么是ZERO
+
+		speed.ZERO();
+
 		bool Coot = false;
-		if ((key >= 'a' && key <= 'z') || key == ' '){ 
-			Control(ardrone, key);  //启动控制
+		if ((key >= 'a' && key <= 'z') || key == ' ')
+		{ 
+			Control(ardrone, key); 
 			Coot = true;
 		}
-
+		//如果没有锁定
 		if (!Lock && !Coot){
-			speed.Update( Make_dec( ardrone ), Global_Pro_LT );//这是控制台的控制
-		}
-			
-		if (!Lock && Lost > 0){ 
-			speed.ZERO(); //这个到底是在哪定义的
-			if(Lost<3)cout << "LOST LOST LOST LOST LOST !!!" << endl; //为什么是Lost<3?
+			//speed.vx = speed.FB*3;
+			//这里是控制台判断物体移动方向，然后通知飞机移动方向速度变化
+			speed.Update( Make_dec( ardrone ), Global_Pro_LT );
+		//	speed.vx *= 8;
+			//speed.vx = speed.vx;
+			//赋予速度一个初值。（1）24/8 必须要调节的实验
+	//		speed.Update(5, 0,0);
+			/// here is the huang code
+	/*		if (!file){
+				file <<" xspeed: " <<speed.vx;
+				file << " yspeed: "<<speed.vy;
+				file << " zspeed: " << speed.vz;
+				file << " rspeed: " << speed.vr;
+				file << endl;
+			}
+	*/	
+		////////////////////////////
+			//cout << "now xspeed is:"<<pre_speed.vx << endl;
 		}
 
-		if (speed.isEmpty() && pre_speed == speed)continue; //这应该是重新
+		//丢掉目标
+		if (!Lock && Lost > 0)
+		{
+			speed.ZERO();
+			if(Lost<3)
+				cout << "LOST LOST LOST LOST LOST !!!" << endl;
+		}
+
+		if (speed.isEmpty() && pre_speed == speed)
+			continue;
 		
-		SPEED cur = speed.GotSlow(); //为什么把当前的变小?
-		if (count % POP >= POP/5 ){ 
-			cur = speed; //这个...不知道为什么除以5
+		SPEED cur = speed.GotSlow();
+		//避免过于频繁的发送消息
+		/*
+		if (count % POP >= POP/5 ){
+			cur = speed;
 		}else{
-			cur = speed; cur.ZERO(); 
+			cur = speed; cur.ZERO();
 		}
-		cur.Lock(4);
-		ardrone.move3D(cur);
-		pre_speed = speed;
+		*/
+		//这里，x轴被锁定。vz!=0,则vy=vr=0;
+	//	cur.Lock(4);  //这里的屏蔽是huang加上去的，主要是为了避免锁定vx方向速度，不知道为什么以前这里要锁定速度
+		//以某个速度移动，实际是发送消息
 
+		//避免过于频繁的发送消息
+		clock_t cur_time = clock();
+		if (cur_time - last_act_time < 30)
+			continue;   
+		else
+			last_act_time = cur_time;
+		
+		ardrone.move3D(cur);
+		if (cur.vx || cur.vy || cur.vz || cur.vr)
+		{
+			cout << "now send_xspeed  is: " << cur.vx << endl;
+			cout << "now send_yspeed  is: " << cur.vy << endl;
+			cout << "now send_zspeed  is: " << cur.vz << endl;
+			if (cur.vr)
+				cout << "now send_vrspeed is: " << cur.vr << endl;
+		}
+		if (cur.vr != 0){
+			file << " send_xspeed: " << cur.vx;
+			file << " send_yspeed: " << cur.vy;
+			file << " send_zspeed: " << cur.vz;
+			file << " send_rspeed: " << cur.vr;
+			file << endl;
+		}
+		
+		pre_speed = speed;
 	}
     ardrone.Close();
 	fclose(bb_file); 
+	file << "end" << endl;
+	file.close();
 	return 0;
 }
 const int maxThsod = 80;
+// 这个函数没有搞懂，应该是对当前的速度进行处理，得到一个小速度
+//主要是为了处理飞机如果靠太近，那么就要将速度减小的问题。
 SPEED GotSlow(SPEED now){
 	int CX = cur_Fr.x + cur_Fr.width / 2;
 	int CY = cur_Fr.y + cur_Fr.height / 2;
@@ -179,11 +245,11 @@ SPEED GotSlow(SPEED now){
 	if (PP != 0)PP += 0.2;
 	Kx = sqrt(PP);
 	SPEED ans;
-	ans.Update(now.vx*Kx, now.vy*Ky, now.vz*Kz);//这里更新速度
+	ans.Update(now.vx*Kx, now.vy*Ky, now.vz*Kz, 0);
 	return ans;
 }
 
-void SetRange(){ //这个应该是设置区间的吧
+void SetRange(){
 	int s = init_Fr.height * init_Fr.width;
 	if (s < 1000){
 		L_SL = (int)(0.6*s);
@@ -213,42 +279,46 @@ void SetRange(){ //这个应该是设置区间的吧
 	XXR = TTX - XXL;
 	YYR = TTY-YYL-20;
 }
+// controll the plane 
 void Control(ARDrone &ardrone, char key){
 	// Take off / Landing
-	speed.ZERO();  //悬浮
-	int bits = 0; //没看懂这是啥
-	if (key == ' ') {
-		if (ardrone.onGround()) ardrone.takeoff();  //这是对于起飞的控制
+	speed.ZERO();
+	int bits = 0;
+	if (key == ' ') {                                                                    
+		if (ardrone.onGround()) ardrone.takeoff();
 		else					ardrone.landing();
-	}else if (key == 'i')   { //Front //向前飞 然而bits还是不懂
+	}else if (key == 'i')   { //Front
 		speed.Update(1 << 0,false);
-		//speed.Up_FB(true);
+		speed.Up_FB(true);
+
+	//	cout <<"now xspeed: "<<speed.vx<<endl;
 		bits += 1 << 0;
+	//	cout << " : front!\n";
 	}else if (key == 'k'){   //Back
-		//speed.Update(1 << 1);
-		//speed.Up_FB(false);
+		speed.Update(1 << 1, false);
+		speed.Up_FB(false);
 		bits += 1 << 1;
 	}else if (key == 'u'){   //Roll L
-		//speed.Roll(2.0);
+		speed.Roll(2.0);
 		speed.Roll(1.5);
 	}else if (key == 'o'){    //Roll R
-		//speed.Roll(-2.0);
+		speed.Roll(-2.0);
 		speed.Roll(-1.5);
 	}else if (key == 'j'){
-		//speed.Update(1 << 2);
-		//speed.Up_LR(true);
+		speed.Update(1 << 2, false);
+		speed.Up_LR(false);
 		bits += 1 << 2;
 	}else if (key == 'l'){
-		//speed.Update(1 << 3);
-		//speed.Up_LR(false);
+		speed.Update(1 << 3, false);
+		speed.Up_LR(false);
 		bits += 1 << 3;
 	}else if (key == 'q'){
-		//speed.Update(1 << 4);
-		//speed.vz = speed.UD;
+		speed.Update(1 << 4, false);
+		speed.vz = speed.UD;
 		bits += 1 << 4;
 	}else if (key == 'a'){
-		//speed.Update(1 << 5);
-		//speed.vz = -speed.UD;
+		speed.Update(1 << 5, false);
+		speed.vz = -speed.UD;
 		bits += 1 << 5;
 	}else if (key == 'z'){
 		ardrone.setFlatTrim();
@@ -272,40 +342,42 @@ void Control(ARDrone &ardrone, char key){
 	//return 0;
 	if (speed.vr == 0)speed.Update(bits,false); // L-R
 }
-int Make_dec(ARDrone &ardrone){ //这是判断人走的方向 然后输出到控制台的
+//这个函数是指判断物体移动情况。
+int Make_dec(ARDrone &ardrone){
+	//cur_Fr 是当前得到的框大小，根据它与初始画的框大小比较，判断飞机是要往前飞还是往后飞。  
 	//int IniS = init_Fr.height*init_Fr.width;
-	int CurS = cur_Fr.height*cur_Fr.width; //当前的Screen 的高度和宽度
-	int bits = 0;//Bits 是控制的方式 不同的位数代表不同指令
+	int CurS = cur_Fr.height*cur_Fr.width;
+	int bits = 0;
 	if (CurS > R_SL){
 		//Back
-		//Control(ardrone, 'k');
+	    Control(ardrone, 'k');
 		bits |= 1 << 1;
-		//cout << "Go Back:  " << CurS << " -> " << R_SL << endl;
+		cout << "Go Back:  " << CurS << " -> " << R_SL << endl;
 	}else if (CurS < L_SL ){
 		//Front
-		//Control(ardrone, 'i');
+		Control(ardrone, 'i');
 		bits |= 1 << 0;
-		//cout << "Front:  " << CurS << " -> " << L_SL << endl;
+		cout << "Front:  " << CurS << " -> " << L_SL << endl;
 	}
 	int mid = (cur_Fr.x + cur_Fr.width / 2);
 	if (mid < XXL){
-		//Control(ardrone, 'j');
+		Control(ardrone, 'j');
 		bits |= 1 << 2;
-		//cout << "Left: " << cur_Fr.x << "->" << XXL << endl;
+		cout << "Left: " << cur_Fr.x << "->" << XXL << endl;
 	}else if (mid > XXR){
-		//Control(ardrone, 'l');
+		Control(ardrone, 'l');
 		bits |= 1 << 3;
-		//cout << "Right: " << cur_Fr.x << "->" << TTX - XXL - cur_Fr.width / 3 << endl;
+		cout << "Right: " << cur_Fr.x << "->" << TTX - XXL - cur_Fr.width / 3 << endl;
 	}
 	mid = (cur_Fr.y + cur_Fr.height / 2);
 	if (mid < YYL){
-		//Control(ardrone, 'q');
+		Control(ardrone, 'q');
 		bits |= 1 << 4;
-		//cout << "UP" << endl;
+		cout << "UP" << endl;
 	}else if (mid > YYR){//|| cur_Fr.y+cur_Fr.height>TTY*0.95){
-		//Control(ardrone, 'a');
+		Control(ardrone, 'a');
 		bits |= 1 << 5;
-		//cout << "Down" << endl;
+		cout << "Down" << endl;
 	}
 	return bits;
 }
